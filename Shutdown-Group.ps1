@@ -55,16 +55,17 @@
 param ([string]$group)  
 
 $group = "a"
-$deviceList = "c:\scripts\eaton\server\test2.csv"
-$logFolder = "c:\scripts\eaton\server\logs"
-$clusters = @("asgard", "midgard")
-$pTypes = @("host", "physical", "cluster*")
+$deviceList = "c:\temp\server-list.csv"             # path to server list
+$logFolder = "c:\temp\logs"                         # log directory
+$clusters = @("clusterA", "ClusterB")               # cluster names
+$hTypes = @("*host*", "*physical*", "*cluster*")    # physical host types
 $guest = "guest"
 $log = ("$logFolder\Server-Shutdown-Log-" + (Get-Date).tostring("MM-dd-yyyy") + ".csv")
 
-# --------------------------------------------------------------
+# create date stamped log file is non-existant
 if(!(Test-Path -Path $log )){New-Item -ItemType File -Path $log}
 
+# log function
 function Write-Log {
     param ([string]$code)
 
@@ -85,8 +86,7 @@ function Write-Log {
     } | Export-Csv -Path $log  -force -Append -NoTypeInformation
 }    
 
-# --------------------------------------------------------------
-
+# select all rows in csv in target group
 $servers = Import-Csv -Path $deviceList| Where-Object {$_.Group -eq $group} 
 foreach ($server in $servers) {
     # csv variables
@@ -95,8 +95,7 @@ foreach ($server in $servers) {
     $type = $server.type
     $hoster = $server.host
 
-# --------------------------------------------------------------
-# if hosted within failover cluster:
+# determine if target is hosted within a failover cluster:
     if (($type -eq $guest) -and ($hoster -in $clusters)) {
        $vmNode = Get-ClusterNode –Cluster $hoster | Get-ClusterResource -Name *$name 
         $vmNode | Select-Object -Index 0 | Get-VM | Stop-VM -Force -WarningVariable a
@@ -107,8 +106,8 @@ foreach ($server in $servers) {
             Write-Log -code 2 
         }
     }
-# --------------------------------------------------------------
-# if hosted on standalone host:
+
+# determine if target is hosted on a standalone host:
     elseif (($type -eq $guest) -and ($hoster -notin $clusters)) {
         if ((get-vm -name $name -ComputerName $hoster).state -eq 'Running') {
             Stop-VM –Name $name –ComputerName $hoster -Force; 
@@ -121,7 +120,7 @@ foreach ($server in $servers) {
             Write-Log -code 3 
         }
     }
-# --------------------------------------------------------------
+
 #   If device is a physical server:
     elseif ($type -in $pTypes) {
         # shutdown command
